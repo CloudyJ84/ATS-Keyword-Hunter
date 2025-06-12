@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS Keyword Matching Game</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" xintegrity="sha512-Fo3rlrZj/k7ujTnHg4CGR2D7kSs0xXtkxBYKPJt05+n+dD4tF1nBv7dGz6a2/k0b3FzR3Z/yS+tK2J+A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        /* Custom styles for the game */
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align at the top */
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .game-container {
+            background-color: #ffffff;
+            border-radius: 1.5rem; /* Large rounded corners */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); /* Soft shadow */
+            max-width: 900px;
+            width: 100%;
+            padding: 2.5rem; /* Generous padding */
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            position: relative; /* For loading overlay positioning */
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 1rem;
+            border-radius: 1.5rem;
+            z-index: 10;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #3b82f6; /* Blue-500 */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            z-index: 20;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 30px;
+            border-radius: 1rem;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            cursor: pointer;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        /* Keyword display for feedback */
+        .keyword-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            justify-content: center;
+        }
+        .keyword-item {
+            padding: 0.4rem 0.8rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            color: white;
+        }
+        .keyword-correct { background-color: #10B981; } /* Emerald-500 */
+        .keyword-missed { background-color: #F59E0B; } /* Amber-500 */
+        .keyword-extra { background-color: #EF4444; } /* Red-500 */
+        .keyword-hint { background-color: #6366F1; } /* Violet-500 */
+
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .game-container {
+                padding: 1.5rem;
+                border-radius: 1rem;
+            }
+        }
+    </style>
+</head>
+<body class="selection:bg-blue-200 selection:text-blue-900">
+    <div class="game-container">
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="loading-overlay hidden">
+            <div class="spinner"></div>
+            <p class="text-gray-700 text-lg font-medium">Generating job description...</p>
+        </div>
+
+        <h1 class="text-4xl font-extrabold text-gray-900 text-center mb-6">
+            <i class="fas fa-search-dollar text-blue-500 mr-3"></i>ATS Keyword Match
+        </h1>
+        <p class="text-lg text-gray-700 text-center mb-4">
+            Read the job description below and type the keywords you think an Applicant Tracking System (ATS) would look for. Separate multiple keywords with commas or spaces.
+        </p>
+
+        <!-- Score Display -->
+        <div class="text-2xl font-bold text-gray-800 text-center mb-6">
+            Score: <span id="current-score" class="text-blue-600">0</span>
+        </div>
+
+        <!-- Job Description Display -->
+        <div id="job-description-display" class="bg-blue-50 p-6 rounded-lg border border-blue-200 min-h-[120px] text-gray-800 leading-relaxed text-base overflow-y-auto max-h-96">
+            <p class="text-gray-500 text-center italic">Click "Generate New Job" to start!</p>
+        </div>
+
+        <!-- Keyword Input -->
+        <div class="mt-4">
+            <label for="keyword-input" class="block text-gray-700 text-sm font-bold mb-2">Your Keywords:</label>
+            <textarea id="keyword-input" rows="4" class="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200" placeholder="e.g., Data Analysis, SQL, Python, Excel"></textarea>
+        </div>
+
+        <!-- Hint Display Area -->
+        <div id="hint-display" class="mt-2 p-3 bg-indigo-50 rounded-lg border border-indigo-200 text-indigo-800 hidden">
+            <strong class="flex items-center"><i class="fas fa-lightbulb mr-2"></i> Hint:</strong> <span id="hint-text"></span>
+        </div>
+
+        <!-- Feedback and Score -->
+        <div id="feedback-area" class="mt-4 p-4 bg-gray-100 rounded-lg text-gray-800 text-center hidden">
+            <h3 class="text-xl font-semibold mb-2">Results:</h3>
+            <p id="check-summary-text" class="text-lg mb-4"></p>
+            <div id="correct-keywords-display" class="mb-2"></div>
+            <div id="missed-keywords-display" class="mb-2"></div>
+            <div id="extra-keywords-display" class="mb-4"></div>
+            <p id="ats-info" class="text-sm mt-2 text-gray-600">
+                Keywords are crucial because Applicant Tracking Systems (ATS) scan resumes for specific terms found in job descriptions. Matching these keywords can significantly improve your chances of getting noticed by recruiters.
+            </p>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex flex-wrap justify-center gap-4 mt-6">
+            <button id="generate-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 flex items-center">
+                <i class="fas fa-sync-alt mr-2"></i> Generate New Job
+            </button>
+            <button id="check-button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 flex items-center" disabled>
+                <i class="fas fa-check-circle mr-2"></i> Check Keywords
+            </button>
+            <button id="hint-button" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 flex items-center" disabled>
+                <i class="fas fa-lightbulb mr-2"></i> Get Hint (-10 Pts)
+            </button>
+            <button id="reset-button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 flex items-center" disabled>
+                <i class="fas fa-undo mr-2"></i> Reset
+            </button>
+            <button id="ats-modal-button" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 flex items-center">
+                <i class="fas fa-info-circle mr-2"></i> What is ATS?
+            </button>
+        </div>
+    </div>
+
+    <!-- ATS Explanation Modal -->
+    <div id="ats-modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-button" id="close-modal">&times;</span>
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">What is an Applicant Tracking System (ATS)?</h2>
+            <p class="text-gray-700 mb-4">
+                An Applicant Tracking System (ATS) is a software application that companies use to manage recruitment and hiring needs. Think of it as a digital gatekeeper for job applications.
+            </p>
+            <p class="text-gray-700 mb-4">
+                When you apply for a job online, your resume and cover letter are often first scanned by an ATS, not a human recruiter. This system parses your document for specific keywords, phrases, and qualifications mentioned in the job description.
+            </p>
+            <p class="text-gray-700">
+                If your application doesn't contain enough of these keywords, it might be automatically filtered out before a human ever sees it. This is why tailoring your resume with relevant keywords from the job description is crucial for increasing your chances of getting an interview!
+            </p>
+        </div>
+    </div>
+
+    <script type="module">
+        // Global variables provided by the Canvas environment for Firebase/Auth (not used in this app)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // DOM elements
+        const jobDescriptionDisplay = document.getElementById('job-description-display');
+        const keywordInput = document.getElementById('keyword-input');
+        const generateButton = document.getElementById('generate-button');
+        const checkButton = document.getElementById('check-button');
+        const hintButton = document.getElementById('hint-button');
+        const resetButton = document.getElementById('reset-button');
+        const feedbackArea = document.getElementById('feedback-area');
+        const checkSummaryText = document.getElementById('check-summary-text');
+        const currentScoreDisplay = document.getElementById('current-score');
+        const correctKeywordsDisplay = document.getElementById('correct-keywords-display');
+        const missedKeywordsDisplay = document.getElementById('missed-keywords-display');
+        const extraKeywordsDisplay = document.getElementById('extra-keywords-display');
+        const hintDisplay = document.getElementById('hint-display');
+        const hintText = document.getElementById('hint-text');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const atsModalButton = document.getElementById('ats-modal-button');
+        const atsModal = document.getElementById('ats-modal');
+        const closeModalButton = document.getElementById('close-modal');
+
+        let currentKeywords = []; // Stores the AI-generated correct keywords
+        let currentScore = 0; // Tracks the player's score for the current round
+        let revealedHints = new Set(); // Stores hints that have already been revealed
+
+        // Game constants for scoring
+        const POINTS_CORRECT = 10;
+        const POINTS_MISSED = -5;
+        const POINTS_EXTRA = -3;
+        const HINT_COST = 10;
+
+        // Predefined list of job titles for variety
+        const jobTitles = [
+            "Junior Data Analyst", "Marketing Specialist", "Software Engineer Intern",
+            "Customer Support Representative", "Financial Assistant", "Content Writer",
+            "UX/UI Designer", "Project Coordinator", "Social Media Manager",
+            "Research Assistant", "Digital Marketing Analyst", "Human Resources Coordinator",
+            "Entry-Level Accountant", "IT Support Technician", "Operations Assistant"
+        ];
+
+        /**
+         * Cleans a word or phrase for comparison by removing punctuation and converting to lowercase.
+         * Handles multiple spaces by replacing them with a single space.
+         * @param {string} text - The text to clean.
+         * @returns {string} The cleaned text.
+         */
+        function cleanText(text) {
+            return text.replace(/[.,/#!$%^&*;:{}=\-_`~()—]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+        }
+
+        /**
+         * Parses the user's typed input into a set of cleaned keywords.
+         * Accepts keywords separated by commas, spaces, or newlines.
+         * @param {string} inputText - The raw input from the textarea.
+         * @returns {Set<string>} A set of unique, cleaned keywords.
+         */
+        function parseUserKeywords(inputText) {
+            // Split by commas, newlines, or multiple spaces, then filter out empty strings
+            const rawKeywords = inputText.split(/[, \n]+/).filter(kw => kw.trim() !== '');
+            return new Set(rawKeywords.map(kw => cleanText(kw)));
+        }
+
+        /**
+         * Updates the displayed score.
+         */
+        function updateScoreDisplay() {
+            currentScoreDisplay.textContent = currentScore;
+            // Optionally change color for negative score
+            if (currentScore < 0) {
+                currentScoreDisplay.classList.remove('text-blue-600');
+                currentScoreDisplay.classList.add('text-red-600');
+            } else {
+                currentScoreDisplay.classList.remove('text-red-600');
+                currentScoreDisplay.classList.add('text-blue-600');
+            }
+        }
+
+        /**
+         * Fetches a new AI-generated job description and its keywords.
+         */
+        async function fetchNewJobDescription() {
+            loadingOverlay.classList.remove('hidden'); // Show loading overlay
+            jobDescriptionDisplay.innerHTML = '<p class="text-gray-500 text-center italic">Generating...</p>';
+            keywordInput.value = ''; // Clear input field
+            currentKeywords = []; // Clear previous keywords
+            currentScore = 0; // Reset score for new round
+            revealedHints.clear(); // Clear revealed hints
+            updateScoreDisplay();
+            feedbackArea.classList.add('hidden'); // Hide feedback
+            hintDisplay.classList.add('hidden'); // Hide hint display
+            checkButton.disabled = true;
+            hintButton.disabled = true;
+            resetButton.disabled = true;
+
+            const randomJobTitle = jobTitles[Math.floor(Math.random() * jobTitles.length)];
+
+            // Prepare the prompt for the Gemini API, specifically asking for four sentences.
+            const prompt = `Generate a job description for a "${randomJobTitle}". The job description should be exactly four sentences long, focusing on typical responsibilities, required skills, and qualifications. Additionally, provide a list of 10-15 key skills and terms from the description that an Applicant Tracking System (ATS) would likely flag as important. These keywords should be specific words or short phrases that directly relate to the job role and its requirements. Format the output as JSON with two fields: 'jobDescription' and 'keywords'. Ensure the 'keywords' array contains distinct, cleaned, and lowercased terms.`;
+
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+            const payload = {
+                contents: chatHistory,
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "jobDescription": { "type": "STRING" },
+                            "keywords": {
+                                "type": "ARRAY",
+                                "items": { "type": "STRING" }
+                            }
+                        },
+                        "propertyOrdering": ["jobDescription", "keywords"]
+                    }
+                }
+            };
+
+            const apiKey = ""; // Canvas will automatically provide this in runtime
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const jsonString = result.candidates[0].content.parts[0].text;
+                    const parsedData = JSON.parse(jsonString);
+
+                    if (parsedData.jobDescription && parsedData.keywords) {
+                        jobDescriptionDisplay.textContent = parsedData.jobDescription;
+                        // Clean and store keywords, ensuring uniqueness and lowercasing
+                        currentKeywords = [...new Set(parsedData.keywords.map(kw => cleanText(kw)))];
+                        // Enable buttons after content loads and input is not empty
+                        checkButton.disabled = keywordInput.value.trim() === '';
+                        hintButton.disabled = currentKeywords.length === 0; // Disable hint if no keywords
+                        resetButton.disabled = false;
+                    } else {
+                        jobDescriptionDisplay.innerHTML = '<p class="text-red-500 text-center">Error: Missing job description or keywords in AI response.</p>';
+                        console.error("AI response missing required fields:", parsedData);
+                    }
+                } else {
+                    jobDescriptionDisplay.innerHTML = '<p class="text-red-500 text-center">Error: Could not generate job description. Please try again.</p>';
+                    console.error("No candidates or content in AI response:", result);
+                }
+            } catch (error) {
+                jobDescriptionDisplay.innerHTML = '<p class="text-red-500 text-center">Error fetching data. Please check your internet connection and try again.</p>';
+                console.error("Fetch error:", error);
+            } finally {
+                loadingOverlay.classList.add('hidden'); // Hide loading overlay
+            }
+        }
+
+        /**
+         * Displays a list of keywords with appropriate styling.
+         * @param {HTMLElement} container - The DOM element to append keywords to.
+         * @param {string[]} keywords - Array of keywords to display.
+         * @param {string} className - Tailwind class for styling (e.g., 'keyword-correct').
+         * @param {string} title - Title for the section.
+         */
+        function displayKeywords(container, keywords, className, title) {
+            container.innerHTML = `<strong class="text-gray-800">${title}:</strong>`;
+            if (keywords.length > 0) {
+                const listContainer = document.createElement('div');
+                listContainer.classList.add('keyword-list');
+                keywords.forEach(kw => {
+                    const span = document.createElement('span');
+                    span.textContent = kw;
+                    span.classList.add('keyword-item', className);
+                    listContainer.appendChild(span);
+                });
+                container.appendChild(listContainer);
+            } else {
+                 container.innerHTML += `<span class="text-gray-600 italic ml-2">${title === 'Correctly identified' ? 'None yet.' : 'None.'}</span>`;
+            }
+        }
+
+        /**
+         * Checks the user's typed keywords against the correct keywords.
+         * Calculates score and provides detailed feedback.
+         */
+        function checkKeywords() {
+            const userKeywords = parseUserKeywords(keywordInput.value);
+            const correctSet = new Set(currentKeywords);
+
+            let correctFound = new Set();
+            let missedKeywords = new Set(correctSet); // Start with all correct, remove as found
+            let extraKeywords = new Set();
+
+            userKeywords.forEach(userKw => {
+                if (correctSet.has(userKw)) {
+                    correctFound.add(userKw);
+                    missedKeywords.delete(userKw); // If user found it, it's not missed
+                } else {
+                    extraKeywords.add(userKw);
+                }
+            });
+
+            // Calculate score
+            let roundScore = 0;
+            roundScore += correctFound.size * POINTS_CORRECT;
+            roundScore += missedKeywords.size * POINTS_MISSED;
+            roundScore += extraKeywords.size * POINTS_EXTRA;
+            currentScore += roundScore; // Add to overall score
+
+            updateScoreDisplay(); // Update score display
+
+            // Display results
+            feedbackArea.classList.remove('hidden');
+            checkSummaryText.innerHTML = `You earned <strong class="${roundScore >= 0 ? 'text-green-600' : 'text-red-600'}">${roundScore}</strong> points this round.`;
+
+            displayKeywords(correctKeywordsDisplay, Array.from(correctFound).sort(), 'keyword-correct', 'Correctly identified');
+            displayKeywords(missedKeywordsDisplay, Array.from(missedKeywords).sort(), 'keyword-missed', 'Missed keywords (these were important!)');
+            displayKeywords(extraKeywordsDisplay, Array.from(extraKeywords).sort(), 'keyword-extra', 'Extra keywords (not in this job description)');
+
+            // Disable buttons after checking
+            checkButton.disabled = true;
+            hintButton.disabled = true; // No hints after checking
+            generateButton.disabled = false; // Allow generating new job
+        }
+
+        /**
+         * Provides a hint to the user by revealing one un-typed correct keyword.
+         */
+        function getHint() {
+            if (currentScore < HINT_COST) {
+                // Optionally show a message that score is too low
+                hintText.textContent = "Not enough points for a hint!";
+                hintDisplay.classList.remove('hidden');
+                setTimeout(() => hintDisplay.classList.add('hidden'), 2000);
+                return;
+            }
+
+            const userKeywords = parseUserKeywords(keywordInput.value);
+            const availableHints = currentKeywords.filter(kw =>
+                !userKeywords.has(kw) && !revealedHints.has(kw)
+            );
+
+            if (availableHints.length > 0) {
+                currentScore -= HINT_COST;
+                updateScoreDisplay();
+
+                const hint = availableHints[Math.floor(Math.random() * availableHints.length)];
+                revealedHints.add(hint); // Mark as revealed
+
+                hintText.textContent = `Don't forget: "${hint}"`;
+                hintDisplay.classList.remove('hidden');
+
+                // Disable hint button if no more hints are available after this one
+                if (currentKeywords.filter(kw => !userKeywords.has(kw) && !revealedHints.has(kw)).length === 0) {
+                    hintButton.disabled = true;
+                }
+            } else {
+                hintText.textContent = "No more keywords to hint!";
+                hintDisplay.classList.remove('hidden');
+                hintButton.disabled = true;
+                setTimeout(() => hintDisplay.classList.add('hidden'), 2000);
+            }
+        }
+
+        /**
+         * Resets the current game state without generating a new job.
+         * Clears input, feedback, and re-enables relevant buttons.
+         */
+        function resetGame() {
+            keywordInput.value = ''; // Clear input field
+            feedbackArea.classList.add('hidden'); // Hide feedback
+            hintDisplay.classList.add('hidden'); // Hide hint display
+            revealedHints.clear(); // Clear revealed hints for the current round
+            checkButton.disabled = keywordInput.value.trim() === ''; // Enable/disable based on input
+            hintButton.disabled = currentKeywords.length === 0; // Re-enable hint
+            resetButton.disabled = true; // Disable reset until next check or generate
+            generateButton.disabled = false; // Always allow generating new job
+        }
+
+        // Event Listeners
+        generateButton.addEventListener('click', fetchNewJobDescription);
+        checkButton.addEventListener('click', checkKeywords);
+        hintButton.addEventListener('click', getHint);
+        resetButton.addEventListener('click', resetGame);
+
+        // Enable/disable check and hint buttons based on input field content and game state
+        keywordInput.addEventListener('input', () => {
+            const hasInput = keywordInput.value.trim() !== '';
+            checkButton.disabled = !hasInput;
+            // Hint button should only be enabled if there are keywords to hint and game isn't checked
+            hintButton.disabled = hasInput && !checkButton.disabled && currentKeywords.filter(kw => !parseUserKeywords(keywordInput.value).has(kw) && !revealedHints.has(kw)).length === 0;
+            if (!hasInput) { // If input is empty, reset button disabled, unless feedback is showing
+                resetButton.disabled = feedbackArea.classList.contains('hidden');
+            } else {
+                resetButton.disabled = false;
+            }
+        });
+
+
+        atsModalButton.addEventListener('click', () => {
+            atsModal.classList.remove('hidden');
+        });
+
+        closeModalButton.addEventListener('click', () => {
+            atsModal.classList.add('hidden');
+        });
+
+        // Close modal if clicked outside of content
+        atsModal.addEventListener('click', (event) => {
+            if (event.target === atsModal) {
+                atsModal.classList.add('hidden');
+            }
+        });
+
+        // Initial load: generate a job description
+        window.onload = function() {
+            fetchNewJobDescription();
+        };
+    </script>
+</body>
+</html>
